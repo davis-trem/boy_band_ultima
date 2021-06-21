@@ -1,3 +1,4 @@
+// import Phaser from 'phaser';
 import 'phaser';
 import Boot from './scenes/boot';
 import Preload from './scenes/preload';

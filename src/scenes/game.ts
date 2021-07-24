@@ -52,15 +52,22 @@ export class Game extends Scene {
           }
 
           let obj = map[ev.noteName] || {};
-          if (ev.velocity === 0 || ev.name === 'Note off') {
+          let pendingNotes = map.pendingNotes.slice();
+          if (pendingNotes.includes(ev.noteName) || ev.name === 'Note off') {
             const lastTick = Object.keys(obj).slice().pop();
             obj[lastTick].endInSec = ev.tick / ticksPerSecond;
-          } else {
+            const noteIndex = pendingNotes.indexOf(ev.noteName);
+            pendingNotes = [
+              ...pendingNotes.slice(0, noteIndex),
+              ...pendingNotes.slice(noteIndex + 1, pendingNotes.length)
+            ];
+          } else if (ev.velocity !== 0 && ev.name === 'Note on') {
             obj[ev.tick] = { ...ev, startInSec: ev.tick / ticksPerSecond };
+            pendingNotes.push(ev.noteName);
           }
 
-          return { ...map, [ev.noteName]: obj };
-        }, {})
+          return { ...map, pendingNotes, [ev.noteName]: obj };
+        }, { pendingNotes: [] })
       }));
       (window as any).TRACKS = TRACKS
 
@@ -86,16 +93,6 @@ export class Game extends Scene {
     });
 
     Player.on('midiEvent', function(ev: Event) {
-      if (ev.track !== 11) {
-        // return;
-      }
-      // if (![2, 5, 7, 9, 12, 17].includes(ev.track)) {
-      //   return;
-      // }
-      // if (ev.track !== 17 && ev.track !== 2) {
-      //   return;
-      // }
-      // console.log(ev)
       switch (ev.name) {
         case 'Program Change':
           if (ev.track !== 11) {
@@ -113,6 +110,9 @@ export class Game extends Scene {
           }
           break;
         case 'Note on':
+          if (ev.velocity === 0) {
+            break;
+          }
           const volume = ((((ev.velocity / 127) * TRACKS[ev.track - 1].expression) / 127) * TRACKS[ev.track - 1].maxVolume) / 127;
           webAudioFontPlayer.queueWaveTable(
             audioContext,
@@ -121,7 +121,7 @@ export class Game extends Scene {
             0,
             ev.noteNumber,
             TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].endInSec - TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].startInSec,
-            volume / (ev.track === 11 ? 1 : 7)
+            volume / (ev.track === 11 ? 2 : 7)
           );
           break;
         case 'Sequence/Track Name':

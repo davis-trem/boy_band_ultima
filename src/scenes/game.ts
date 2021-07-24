@@ -12,7 +12,8 @@ export class Game extends Scene {
   }
 
   preload(): void {
-    this.load.binary('mymidi', '../../assets/midi/stickerbush_symphony.mid')
+    // this.load.binary('mymidi', '../../assets/midi/stickerbush_symphony.mid');
+    this.load.binary('mymidi', '../../assets/midi/fz_mute_city.mid');
   }
 
   create(): void {
@@ -34,62 +35,36 @@ export class Game extends Scene {
       console.log({ format, instruments, tempo, tick, tracks, division });
       (window as any).ppp = { format, instruments, tempo, tick, tracks, division }
 
-      const percussionInstruments = Array.from(new Set(
-        tracks[10].events.reduce(
-          (list, ev) => ev.name === 'Note on' ? list.concat(ev.noteNumber) : list, []
-        )
-      ));
-
-      // TRACKS = Array(tracks.length).fill({
-      //   ticksPerSecond: (tempo * division) / 60,
-      //   maxVolume: 127,
-      //   expression: 127,
-      //   notesPlaying: {}
-      // });
-      // TRACKS.forEach((_, index) => {
-      //   console.log(index)
-      //   TRACKS[index].events = tracks[index].events.reduce((map, ev) => {
-      //     if (ev.name !== 'Note on') {
-      //       return map;
-      //     }
-      //     let obj = map[ev.name] || {};
-      //     obj[ev.noteName] = obj?.[ev.noteName] || {};
-      //     if (ev.velocity === 0) {
-      //       const lastTick = Object.keys(obj[ev.noteName]).slice().pop();
-      //       obj[ev.noteName][lastTick].endInSec = ev.tick / TRACKS[0].ticksPerSecond;
-      //     } else {
-      //       obj[ev.noteName][ev.tick] = { ...ev, startInSec: ev.tick / TRACKS[0].ticksPerSecond };
-      //     }
-
-      //     return { ...map, [ev.name]: obj };
-      //   }, {});
-      //   console.log(TRACKS[index].events, tracks[index].events, TRACKS)
-      // });
+      let percussionInstruments = [];
 
       const ticksPerSecond = (tempo * division) / 60;
       TRACKS = Array(tracks.length).fill('').map((_, index) => ({
         maxVolume: 127,
         expression: 127,
-        notesPlaying: {},
-        events: tracks[index].events.reduce((map, ev) => {
-          if (ev.name !== 'Note on') {
+        notes: tracks[index].events.reduce((map, ev) => {
+          if (ev.name !== 'Note on' && ev.name !== 'Note off' ) {
             return map;
           }
-          let obj = map[ev.name] || {};
-          obj[ev.noteName] = obj?.[ev.noteName] || {};
-          if (ev.velocity === 0) {
-            const lastTick = Object.keys(obj[ev.noteName]).slice().pop();
-            obj[ev.noteName][lastTick].endInSec = ev.tick / ticksPerSecond;
-          } else {
-            obj[ev.noteName][ev.tick] = { ...ev, startInSec: ev.tick / ticksPerSecond };
+
+          // Get Percussion Intruments since we're already looping thru the events
+          if (index === 10) {
+            percussionInstruments.push(ev.noteNumber);
           }
 
-          return { ...map, [ev.name]: obj };
+          let obj = map[ev.noteName] || {};
+          if (ev.velocity === 0 || ev.name === 'Note off') {
+            const lastTick = Object.keys(obj).slice().pop();
+            obj[lastTick].endInSec = ev.tick / ticksPerSecond;
+          } else {
+            obj[ev.tick] = { ...ev, startInSec: ev.tick / ticksPerSecond };
+          }
+
+          return { ...map, [ev.noteName]: obj };
         }, {})
       }));
+      (window as any).TRACKS = TRACKS
 
-      console.log(TRACKS);
-      (window as any).TRACKS= TRACKS
+      percussionInstruments = Array.from(new Set(percussionInstruments));
 
       instruments.forEach(instrument => {
         const nn = webAudioFontPlayer.loader.findInstrument(instrument);
@@ -111,8 +86,8 @@ export class Game extends Scene {
     });
 
     Player.on('midiEvent', function(ev: Event) {
-      if (ev.track === 11) {
-        return;
+      if (ev.track !== 11) {
+        // return;
       }
       // if (![2, 5, 7, 9, 12, 17].includes(ev.track)) {
       //   return;
@@ -138,21 +113,16 @@ export class Game extends Scene {
           }
           break;
         case 'Note on':
-          if (ev.velocity === 0) {
-            TRACKS[ev.track - 1].notesPlaying[ev.noteName]?.cancel();
-          } else {
-            const volume = ((((ev.velocity / 127) * TRACKS[ev.track - 1].expression) / 127) * TRACKS[ev.track - 1].maxVolume) / 127;
-            TRACKS[ev.track - 1].notesPlaying[ev.noteName] = webAudioFontPlayer.queueWaveTable(
-              audioContext,
-              audioContext.destination,
-              ev.track !== 11 ? TRACKS[ev.track - 1].instrument : instrumentFiles.percussion[ev.noteNumber],
-              0,
-              ev.noteNumber,
-              TRACKS[ev.track - 1].events[ev.name][ev.noteName][ev.tick].endInSec - TRACKS[ev.track - 1].events[ev.name][ev.noteName][ev.tick].startInSec,
-              volume / (ev.noteNumber > 60 ? 15 : 10)
-            );
-          }
-          
+          const volume = ((((ev.velocity / 127) * TRACKS[ev.track - 1].expression) / 127) * TRACKS[ev.track - 1].maxVolume) / 127;
+          webAudioFontPlayer.queueWaveTable(
+            audioContext,
+            audioContext.destination,
+            ev.track !== 11 ? TRACKS[ev.track - 1].instrument : instrumentFiles.percussion[ev.noteNumber],
+            0,
+            ev.noteNumber,
+            TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].endInSec - TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].startInSec,
+            volume / (ev.track === 11 ? 1 : 7)
+          );
           break;
         case 'Sequence/Track Name':
         case 'MIDI Port':

@@ -4,7 +4,7 @@ import Preload from './scenes/preload';
 import { Game as GameScene } from './scenes/game';
 
 const config: Phaser.Types.Core.GameConfig = {
-  title: 'Demo Game',
+  title: 'Boy Band Ultima',
 
   scene: [Boot, Preload, GameScene],
   backgroundColor: '#333',

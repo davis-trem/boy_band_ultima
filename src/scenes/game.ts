@@ -30,9 +30,9 @@ export class Game extends Scene {
     const Player = new MidiPlayerJS.Player();
     Player.on('fileLoaded', function() {
       console.log('file loaded....')
-      const { format, instruments, tempo, tick, tracks } = Player;
-      console.log({ format, instruments, tempo, tick, tracks });
-      (window as any).ppp = { format, instruments, tempo, tick, tracks }
+      const { format, instruments, tempo, tick, tracks, division } = Player;
+      console.log({ format, instruments, tempo, tick, tracks, division });
+      (window as any).ppp = { format, instruments, tempo, tick, tracks, division }
 
       const percussionInstruments = Array.from(new Set(
         tracks[10].events.reduce(
@@ -40,7 +40,56 @@ export class Game extends Scene {
         )
       ));
 
-      TRACKS = Array(tracks.length).fill({ maxVolume: 127, expression: 127, notesPlaying: {} });
+      // TRACKS = Array(tracks.length).fill({
+      //   ticksPerSecond: (tempo * division) / 60,
+      //   maxVolume: 127,
+      //   expression: 127,
+      //   notesPlaying: {}
+      // });
+      // TRACKS.forEach((_, index) => {
+      //   console.log(index)
+      //   TRACKS[index].events = tracks[index].events.reduce((map, ev) => {
+      //     if (ev.name !== 'Note on') {
+      //       return map;
+      //     }
+      //     let obj = map[ev.name] || {};
+      //     obj[ev.noteName] = obj?.[ev.noteName] || {};
+      //     if (ev.velocity === 0) {
+      //       const lastTick = Object.keys(obj[ev.noteName]).slice().pop();
+      //       obj[ev.noteName][lastTick].endInSec = ev.tick / TRACKS[0].ticksPerSecond;
+      //     } else {
+      //       obj[ev.noteName][ev.tick] = { ...ev, startInSec: ev.tick / TRACKS[0].ticksPerSecond };
+      //     }
+
+      //     return { ...map, [ev.name]: obj };
+      //   }, {});
+      //   console.log(TRACKS[index].events, tracks[index].events, TRACKS)
+      // });
+
+      const ticksPerSecond = (tempo * division) / 60;
+      TRACKS = Array(tracks.length).fill('').map((_, index) => ({
+        maxVolume: 127,
+        expression: 127,
+        notesPlaying: {},
+        events: tracks[index].events.reduce((map, ev) => {
+          if (ev.name !== 'Note on') {
+            return map;
+          }
+          let obj = map[ev.name] || {};
+          obj[ev.noteName] = obj?.[ev.noteName] || {};
+          if (ev.velocity === 0) {
+            const lastTick = Object.keys(obj[ev.noteName]).slice().pop();
+            obj[ev.noteName][lastTick].endInSec = ev.tick / ticksPerSecond;
+          } else {
+            obj[ev.noteName][ev.tick] = { ...ev, startInSec: ev.tick / ticksPerSecond };
+          }
+
+          return { ...map, [ev.name]: obj };
+        }, {})
+      }));
+
+      console.log(TRACKS);
+      (window as any).TRACKS= TRACKS
 
       instruments.forEach(instrument => {
         const nn = webAudioFontPlayer.loader.findInstrument(instrument);
@@ -99,8 +148,8 @@ export class Game extends Scene {
               ev.track !== 11 ? TRACKS[ev.track - 1].instrument : instrumentFiles.percussion[ev.noteNumber],
               0,
               ev.noteNumber,
-              10,
-              volume / (ev.noteNumber > 24 ? 15 : 3)
+              TRACKS[ev.track - 1].events[ev.name][ev.noteName][ev.tick].endInSec - TRACKS[ev.track - 1].events[ev.name][ev.noteName][ev.tick].startInSec,
+              volume / (ev.noteNumber > 60 ? 15 : 10)
             );
           }
           

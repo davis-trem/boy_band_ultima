@@ -3,7 +3,7 @@ import { Scene } from 'phaser';
 export default class Boot extends Scene {
   constructor() {
     super({
-      key: 'BootScene'
+      key: 'BootScene',
     });
   }
 

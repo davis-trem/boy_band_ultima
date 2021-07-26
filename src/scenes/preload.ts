@@ -13,7 +13,7 @@ export default class Preload extends Scene {
 
   constructor() {
     super({
-      key: 'PreloadScene'
+      key: 'PreloadScene',
     });
   }
 

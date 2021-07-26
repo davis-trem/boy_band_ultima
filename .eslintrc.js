@@ -1,30 +1,36 @@
 module.exports = {
-  'env': {
-    'browser': true,
-    'es6': true,
-    'node': true
+  env: {
+    browser: true,
+    es6: true,
+    node: true,
   },
-  extends: [
-    'eslint:recommended'
-  ],
-  'parserOptions': {
-    'ecmaVersion': 2018,
-    'sourceType': 'module'
+  extends: ['eslint:recommended', 'plugin:prettier/recommended'],
+  parserOptions: {
+    ecmaVersion: 2018,
+    sourceType: 'module',
   },
-  'ignorePatterns': ['dist'],
+  ignorePatterns: ['dist'],
   rules: {
     'object-curly-spacing': ['error', 'always'],
-    'comma-dangle': ['error', 'never'],
     'no-trailing-spaces': ['error'],
-    'no-multiple-empty-lines': ['error', { 'max': 1 }]
-  },
-  overrides: [{
-    files: ['*.ts'],
-    extends: [
-      'eslint:recommended',
-      'plugin:@typescript-eslint/recommended'
+    'no-multiple-empty-lines': ['error', { max: 1 }],
+    'prettier/prettier': [
+      'error',
+      {
+        endOfLine: 'auto',
+      },
     ],
-    parser: '@typescript-eslint/parser',
-    plugins: ['@typescript-eslint']
-  }]
+  },
+  overrides: [
+    {
+      files: ['*.ts'],
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:prettier/recommended',
+      ],
+      parser: '@typescript-eslint/parser',
+      plugins: ['@typescript-eslint'],
+    },
+  ],
 };

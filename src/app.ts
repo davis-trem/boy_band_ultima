@@ -16,9 +16,9 @@ const config: Phaser.Types.Core.GameConfig = {
     height: 600,
     max: {
       width: 800,
-      height: 600
-    }
-  }
+      height: 600,
+    },
+  },
 };
 
 window.addEventListener('load', () => {

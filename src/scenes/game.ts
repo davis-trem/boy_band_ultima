@@ -22,6 +22,10 @@ export class Game extends Scene {
     const midiPlayer = new MidiPlayer(this.cache.binary.get('mymidi'));
     await midiPlayer.waitUntillReady();
 
+    midiPlayer.onBeatPlayed(() => {
+      console.log('bbbbbb');
+    });
+
     image.on('pointerdown', () => {
       midiPlayer.togglePlay();
     });

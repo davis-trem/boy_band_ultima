@@ -13,17 +13,18 @@ interface TrackType {
 }
 
 class MidiPlayer {
-  private instrumentFiles: { regular: { [key: number]: any }; percussion: { [key: number]: any } };
-  private TRACKS: TrackType[];
-  private Player: MidiPlayerJS.Player;
   private audioContext: AudioContext;
-  private webAudioFontPlayer: WebAudioFontPlayer;
+  private beatPerSec: number;
+  private beatPlayedCallBack: () => void;
+  private bpsIntervalId: NodeJS.Timeout;
+  private instrumentFiles: { regular: { [key: number]: any }; percussion: { [key: number]: any } };
   private isLoading: boolean;
+  private player: MidiPlayerJS.Player;
   private readyPromise: Promise<void>;
   private readyResolver: (value: void | PromiseLike<void>) => void;
-  private beatPerSec: number;
-  private bpsIntervalId: NodeJS.Timeout;
   private ticksPerQuarterNote: number;
+  private tracks: TrackType[];
+  private webAudioFontPlayer: WebAudioFontPlayer;
 
   constructor(midiBinary: ArrayBuffer) {
     this.isLoading = false;
@@ -36,12 +37,15 @@ class MidiPlayer {
     this.webAudioFontPlayer = new WebAudioFontPlayer();
 
     this.instrumentFiles = { regular: {}, percussion: {} };
-    this.TRACKS = [];
+    this.tracks = [];
 
-    this.Player = new MidiPlayerJS.Player();
+    // Set callbacks incase it doesn't get set
+    this.beatPlayedCallBack = () => null;
+
+    this.player = new MidiPlayerJS.Player();
     this.handleFileLoaded();
     this.handleMidiEvent();
-    this.Player.loadArrayBuffer(midiBinary);
+    this.player.loadArrayBuffer(midiBinary);
   }
 
   waitUntillReady(): Promise<void> {
@@ -51,42 +55,42 @@ class MidiPlayer {
   togglePlay(): void {
     const beatDurationInSec = 1 / this.beatPerSec;
     if (!this.isLoading) {
-      if (this.Player.isPlaying()) {
-        this.Player.pause();
+      if (this.player.isPlaying()) {
+        this.player.pause();
         this.webAudioFontPlayer.cancelQueue(this.audioContext);
         clearInterval(this.bpsIntervalId);
 
         // start at begining of current measure
-        const amountOfBeatsPlayed = this.Player.getCurrentTick() / this.ticksPerQuarterNote;
+        const amountOfBeatsPlayed = this.player.getCurrentTick() / this.ticksPerQuarterNote;
         const beatsPlayedInCurrentMeasure = amountOfBeatsPlayed % 4;
         const ticksPerBeatsInCurrentMeasure =
           beatsPlayedInCurrentMeasure * this.ticksPerQuarterNote;
-        const measureStartTick = this.Player.getCurrentTick() - ticksPerBeatsInCurrentMeasure;
-        this.Player.skipToTick(measureStartTick);
+        const measureStartTick = this.player.getCurrentTick() - ticksPerBeatsInCurrentMeasure;
+        this.player.skipToTick(measureStartTick);
       } else {
-        this.Player.play();
-        this.onBeat();
+        this.player.play();
+        this.beatPlayedCallBack();
         this.bpsIntervalId = setInterval(() => {
-          this.onBeat();
+          this.beatPlayedCallBack();
         }, beatDurationInSec * 1000);
       }
     }
   }
 
-  onBeat(): void {
-    console.log('beeeeeat', this.Player.getCurrentTick());
+  onBeatPlayed(callback: () => void): void {
+    this.beatPlayedCallBack = callback;
   }
 
   private handleFileLoaded() {
-    this.Player.on('fileLoaded', () => {
-      const { instruments, tempo, tracks, division: ticksPerQuarterNote } = this.Player;
+    this.player.on('fileLoaded', () => {
+      const { instruments, tempo, tracks, division: ticksPerQuarterNote } = this.player;
       this.ticksPerQuarterNote = ticksPerQuarterNote;
 
       let percussionInstruments = [];
 
       this.beatPerSec = tempo / 60;
       const ticksPerSecond = (tempo * ticksPerQuarterNote) / 60;
-      this.TRACKS = Array(tracks.length)
+      this.tracks = Array(tracks.length)
         .fill('')
         .map((_, index) => ({
           maxVolume: 127,
@@ -158,21 +162,21 @@ class MidiPlayer {
   }
 
   private handleMidiEvent() {
-    this.Player.on('midiEvent', (ev: Event) => {
+    this.player.on('midiEvent', (ev: Event) => {
       const isPercussion = ev.track === 11;
       switch (ev.name) {
         case 'Program Change':
           if (!isPercussion) {
-            this.TRACKS[ev.track - 1].instrument = this.instrumentFiles.regular[ev.value];
+            this.tracks[ev.track - 1].instrument = this.instrumentFiles.regular[ev.value];
           }
           break;
         case 'Controller Change':
           switch (ev.number) {
             case 7:
-              this.TRACKS[ev.track - 1].maxVolume = ev.value;
+              this.tracks[ev.track - 1].maxVolume = ev.value;
               break;
             case 11:
-              this.TRACKS[ev.track - 1].expression = ev.value;
+              this.tracks[ev.track - 1].expression = ev.value;
               break;
           }
           break;
@@ -181,19 +185,19 @@ class MidiPlayer {
             break;
           }
           const volume =
-            ((((ev.velocity / 127) * this.TRACKS[ev.track - 1].expression) / 127) *
-              this.TRACKS[ev.track - 1].maxVolume) /
+            ((((ev.velocity / 127) * this.tracks[ev.track - 1].expression) / 127) *
+              this.tracks[ev.track - 1].maxVolume) /
             127;
           this.webAudioFontPlayer.queueWaveTable(
             this.audioContext,
             this.audioContext.destination,
             ev.track !== 11
-              ? this.TRACKS[ev.track - 1].instrument
+              ? this.tracks[ev.track - 1].instrument
               : this.instrumentFiles.percussion[ev.noteNumber],
             0,
             ev.noteNumber,
-            this.TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].endInSec -
-              this.TRACKS[ev.track - 1].notes[ev.noteName][ev.tick].startInSec,
+            this.tracks[ev.track - 1].notes[ev.noteName][ev.tick].endInSec -
+              this.tracks[ev.track - 1].notes[ev.noteName][ev.tick].startInSec,
             volume / (isPercussion ? 2 : 7),
           );
           break;

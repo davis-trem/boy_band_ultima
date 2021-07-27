@@ -21,6 +21,9 @@ class MidiPlayer {
   private isLoading: boolean;
   private readyPromise: Promise<void>;
   private readyResolver: (value: void | PromiseLike<void>) => void;
+  private beatPerSec: number;
+  private bpsIntervalId: NodeJS.Timeout;
+  private ticksPerQuarterNote: number;
 
   constructor(midiBinary: ArrayBuffer) {
     this.isLoading = false;
@@ -46,23 +49,43 @@ class MidiPlayer {
   }
 
   togglePlay(): void {
+    const beatDurationInSec = 1 / this.beatPerSec;
     if (!this.isLoading) {
       if (this.Player.isPlaying()) {
         this.Player.pause();
         this.webAudioFontPlayer.cancelQueue(this.audioContext);
+        clearInterval(this.bpsIntervalId);
+
+        // start at begining of current measure
+        const amountOfBeatsPlayed = this.Player.getCurrentTick() / this.ticksPerQuarterNote;
+        const beatsPlayedInCurrentMeasure = amountOfBeatsPlayed % 4;
+        const ticksPerBeatsInCurrentMeasure =
+          beatsPlayedInCurrentMeasure * this.ticksPerQuarterNote;
+        const measureStartTick = this.Player.getCurrentTick() - ticksPerBeatsInCurrentMeasure;
+        this.Player.skipToTick(measureStartTick);
       } else {
         this.Player.play();
+        this.onBeat();
+        this.bpsIntervalId = setInterval(() => {
+          this.onBeat();
+        }, beatDurationInSec * 1000);
       }
     }
   }
 
+  onBeat(): void {
+    console.log('beeeeeat', this.Player.getCurrentTick());
+  }
+
   private handleFileLoaded() {
     this.Player.on('fileLoaded', () => {
-      const { instruments, tempo, tracks, division } = this.Player;
+      const { instruments, tempo, tracks, division: ticksPerQuarterNote } = this.Player;
+      this.ticksPerQuarterNote = ticksPerQuarterNote;
 
       let percussionInstruments = [];
 
-      const ticksPerSecond = (tempo * division) / 60;
+      this.beatPerSec = tempo / 60;
+      const ticksPerSecond = (tempo * ticksPerQuarterNote) / 60;
       this.TRACKS = Array(tracks.length)
         .fill('')
         .map((_, index) => ({

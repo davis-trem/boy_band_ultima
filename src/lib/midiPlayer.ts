@@ -9,14 +9,37 @@ interface TrackType {
   notes: {
     [key: string]: { [key: number]: Event & { startInSec: number; endInSec: number } };
   };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   instrument?: any;
 }
+
+const INSTRUMENT_TYPES = [
+  'Piano',
+  'Chromatic Percussion',
+  'Organ',
+  'Guitar',
+  'Bass',
+  'Strings',
+  'Ensemble',
+  'Brass',
+  'Reed',
+  'Pipe',
+  'Synth Lead',
+  'Synth Pad',
+  'Synth Effects',
+  'Ethnic',
+  'Percussive',
+  'Sound Effects',
+];
+
+type BeatPlayedCallBackType = (beatsPlayedInCurrentMeasure: number) => void;
 
 class MidiPlayer {
   private audioContext: AudioContext;
   private beatPerSec: number;
-  private beatPlayedCallBack: () => void;
+  private beatPlayedCallBack: BeatPlayedCallBackType;
   private bpsIntervalId: NodeJS.Timeout;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private instrumentFiles: { regular: { [key: number]: any }; percussion: { [key: number]: any } };
   private isLoading: boolean;
   private player: MidiPlayerJS.Player;
@@ -32,6 +55,7 @@ class MidiPlayer {
       this.readyResolver = resolve;
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const AudioContextFunc = window.AudioContext || (window as any).webkitAudioContext;
     this.audioContext = new AudioContextFunc();
     this.webAudioFontPlayer = new WebAudioFontPlayer();
@@ -60,25 +84,34 @@ class MidiPlayer {
         this.webAudioFontPlayer.cancelQueue(this.audioContext);
         clearInterval(this.bpsIntervalId);
 
-        // start at begining of current measure
-        const amountOfBeatsPlayed = this.player.getCurrentTick() / this.ticksPerQuarterNote;
-        const beatsPlayedInCurrentMeasure = amountOfBeatsPlayed % 4;
+        const beatsPlayedInCurrentMeasure = this.getBeatsPlayedInCurrentMeasure();
         const ticksPerBeatsInCurrentMeasure =
           beatsPlayedInCurrentMeasure * this.ticksPerQuarterNote;
         const measureStartTick = this.player.getCurrentTick() - ticksPerBeatsInCurrentMeasure;
         this.player.skipToTick(measureStartTick);
       } else {
         this.player.play();
-        this.beatPlayedCallBack();
+        this.beatPlayedCallBack(this.getUserFacingBeatsPlayedInCurrentMeasure());
         this.bpsIntervalId = setInterval(() => {
-          this.beatPlayedCallBack();
+          this.beatPlayedCallBack(this.getUserFacingBeatsPlayedInCurrentMeasure());
         }, beatDurationInSec * 1000);
       }
     }
   }
 
-  onBeatPlayed(callback: () => void): void {
+  onBeatPlayed(callback: BeatPlayedCallBackType): void {
     this.beatPlayedCallBack = callback;
+  }
+
+  getBeatsPlayedInCurrentMeasure(): number {
+    // start at begining of current measure
+    const amountOfBeatsPlayed = this.player.getCurrentTick() / this.ticksPerQuarterNote;
+    return amountOfBeatsPlayed % 4;
+  }
+
+  getUserFacingBeatsPlayedInCurrentMeasure(): number {
+    const beatsPlayedInCurrentMeasure = Math.round(this.getBeatsPlayedInCurrentMeasure() + 1);
+    return beatsPlayedInCurrentMeasure === 5 ? 1 : beatsPlayedInCurrentMeasure;
   }
 
   private handleFileLoaded() {

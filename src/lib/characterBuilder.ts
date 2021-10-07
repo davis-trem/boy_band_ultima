@@ -110,6 +110,13 @@ class CharacterBuilder {
       this.chargingAttack = !this.chargingAttack;
     });
 
+    this.emitter.on(
+      'TICK_PLAYED',
+      ({ tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat }) => {
+        console.log(tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat, 'tttttt');
+      },
+    );
+
     this.emitter.on('BEAT_PLAYED', ({ beat }) => {
       if (this.chargingAttack && this.beatsSinceCharging !== null) {
         this.beatsSinceCharging++;

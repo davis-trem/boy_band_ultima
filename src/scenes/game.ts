@@ -46,6 +46,15 @@ export class Game extends Scene {
       this.emitter.emit('BEAT_PLAYED', { beat });
     });
 
+    midiPlayer.onTickPlayed((tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat) => {
+      this.emitter.emit('TICK_PLAYED', {
+        tick,
+        beatInMeasure,
+        ticksFromPreviousBeat,
+        ticksToNextBeat,
+      });
+    });
+
     image.on('pointerdown', () => {
       midiPlayer.togglePlay();
     });

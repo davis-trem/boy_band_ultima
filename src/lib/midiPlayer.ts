@@ -33,6 +33,12 @@ const INSTRUMENT_TYPES = [
 ];
 
 type BeatPlayedCallBackType = (beatsPlayedInCurrentMeasure: number) => void;
+type TicksPlayedCallBackType = (
+  currentTick: number,
+  closestBeat: number,
+  ticksFromPreviousBeat: number,
+  ticksToNextBeat: number,
+) => void;
 
 class MidiPlayer {
   private audioContext: AudioContext;
@@ -45,6 +51,7 @@ class MidiPlayer {
   private player: MidiPlayerJS.Player;
   private readyPromise: Promise<void>;
   private readyResolver: (value: void | PromiseLike<void>) => void;
+  private tickPlayedCallBack: TicksPlayedCallBackType;
   private ticksPerQuarterNote: number;
   private tracks: TrackType[];
   private webAudioFontPlayer: WebAudioFontPlayer;
@@ -65,6 +72,7 @@ class MidiPlayer {
 
     // Set callbacks incase it doesn't get set
     this.beatPlayedCallBack = () => null;
+    this.tickPlayedCallBack = () => null;
 
     this.player = new MidiPlayerJS.Player();
     this.handleFileLoaded();
@@ -101,6 +109,10 @@ class MidiPlayer {
 
   onBeatPlayed(callback: BeatPlayedCallBackType): void {
     this.beatPlayedCallBack = callback;
+  }
+
+  onTickPlayed(callback: TicksPlayedCallBackType): void {
+    this.tickPlayedCallBack = callback;
   }
 
   getBeatsPlayedInCurrentMeasure(): number {
@@ -195,6 +207,16 @@ class MidiPlayer {
   }
 
   private handleMidiEvent() {
+    this.player.on('playing', ({ tick: currentTick }) => {
+      const beat = Math.round(currentTick / this.ticksPerQuarterNote) + 1;
+      const beatInMeasure = beat % 4 || 4;
+      const ticksFromPreviousBeat =
+        currentTick - Math.floor(currentTick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote;
+      const ticksToNextBeat =
+        Math.ceil(currentTick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote - currentTick;
+      this.tickPlayedCallBack(currentTick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat);
+    });
+
     this.player.on('midiEvent', (ev: Event) => {
       const isPercussion = ev.track === 11;
       switch (ev.name) {

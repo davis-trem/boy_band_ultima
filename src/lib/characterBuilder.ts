@@ -3,9 +3,9 @@ import { TickPlayedData } from './midiPlayer';
 
 class CharacterBuilder {
   private scene: Scene;
-  private chargingAttack: boolean;
-  private attacking: boolean;
-  private beatsSinceCharging: number;
+  // private chargingAttack: boolean;
+  // private attacking: boolean;
+  // private beatsSinceCharging: number;
   private emitter: Events.EventEmitter;
   private CHARGING_BEAT_COUNT = 2;
   private MAX_CHARGING_BEAT_COUNT = 4;
@@ -13,9 +13,9 @@ class CharacterBuilder {
   constructor(scene: Scene, emitter: Events.EventEmitter) {
     this.scene = scene;
     this.emitter = emitter;
-    this.chargingAttack = false;
-    this.attacking = false;
-    this.beatsSinceCharging = null;
+    // this.chargingAttack = false;
+    // this.attacking = false;
+    // this.beatsSinceCharging = null;
   }
 
   loadSprite(): void {
@@ -91,48 +91,62 @@ class CharacterBuilder {
   }
 
   createSprite(x: number, y: number): GameObjects.Sprite {
-    const char = this.scene.add.sprite(x, y, 'character').setInteractive();
+    const char = this.scene.add.sprite(x, y, 'character').setInteractive().setDataEnabled();
+    char.setData({
+      chargingAttack: false,
+      attacking: false,
+      beatsSinceCharging: null,
+    });
     char.play('character_idle');
 
     char.on('pointerdown', () => {
-      if (this.attacking) return;
+      console.log(char.getData('poo'));
+      const [chargingAttack, attacking] = char.getData([
+        'chargingAttack',
+        'attacking',
+        'beatsSinceCharging',
+      ]);
+      if (attacking) return;
 
-      if (this.chargingAttack) {
-        this.attacking = true;
+      if (chargingAttack) {
+        char.setData({ attacking: true });
         char.play('character_kick');
         char.once('animationcomplete', () => {
-          this.attacking = false;
-          this.beatsSinceCharging = null;
+          char.setData({ attacking: false, beatsSinceCharging: null });
           char.playAfterRepeat('character_idle');
         });
       } else {
         char.play('character_walk');
       }
-      this.chargingAttack = !this.chargingAttack;
+      char.setData({ chargingAttack: !chargingAttack });
     });
 
     this.emitter.on('TICK_PLAYED', ({ tickHasReachBeat, closestBeat }: TickPlayedData) => {
-      if (!this.chargingAttack) {
+      const [chargingAttack, beatsSinceCharging] = char.getData([
+        'chargingAttack',
+        'attacking',
+        'beatsSinceCharging',
+      ]);
+      if (!chargingAttack) {
         return;
       }
 
-      if (this.beatsSinceCharging !== null && tickHasReachBeat) {
-        this.beatsSinceCharging++;
-        console.log('beat played', this.beatsSinceCharging, closestBeat);
+      if (beatsSinceCharging !== null && tickHasReachBeat) {
+        char.setData({ beatsSinceCharging: beatsSinceCharging + 1 });
+        console.log('beat played', beatsSinceCharging, closestBeat);
       }
-      if (this.beatsSinceCharging === null) {
-        this.beatsSinceCharging = 1;
-        console.log(this.beatsSinceCharging, closestBeat);
+      if (beatsSinceCharging === null) {
+        char.setData({ beatsSinceCharging: 1 });
+        console.log(beatsSinceCharging, closestBeat);
       }
 
-      if (this.beatsSinceCharging > this.CHARGING_BEAT_COUNT) {
-        this.chargingAttack = false;
+      if (beatsSinceCharging > this.CHARGING_BEAT_COUNT) {
+        char.setData({ chargingAttack: false });
         console.log('diiiiiie');
         char.play('character_die');
         char.once('animationcomplete', () => {
           char.anims.reverse();
-          this.attacking = false;
-          this.beatsSinceCharging = null;
+          char.setData({ attacking: false, beatsSinceCharging: null });
           char.play('character_idle');
         });
       }

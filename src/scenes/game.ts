@@ -38,6 +38,14 @@ export class Game extends Scene {
       .createSprite(this.cameras.main.width - 46 * 3, this.cameras.main.centerY + 46)
       .setScale(4);
 
+    char.setData({ poo: 23 });
+
+    const char2 = this.characterBuilder
+      .createSprite(this.cameras.main.width / 2, this.cameras.main.centerY + 46)
+      .setScale(4);
+
+    char2.setData({ poo: 56 });
+
     const midiPlayer = new MidiPlayer(this.cache.binary.get('mymidi'));
     await midiPlayer.waitUntillReady();
 

@@ -41,18 +41,8 @@ export class Game extends Scene {
     const midiPlayer = new MidiPlayer(this.cache.binary.get('mymidi'));
     await midiPlayer.waitUntillReady();
 
-    midiPlayer.onBeatPlayed((beat) => {
-      console.log(beat, 'bbbbbb');
-      this.emitter.emit('BEAT_PLAYED', { beat });
-    });
-
-    midiPlayer.onTickPlayed((tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat) => {
-      this.emitter.emit('TICK_PLAYED', {
-        tick,
-        beatInMeasure,
-        ticksFromPreviousBeat,
-        ticksToNextBeat,
-      });
+    midiPlayer.onTickPlayed((data) => {
+      this.emitter.emit('TICK_PLAYED', data);
     });
 
     image.on('pointerdown', () => {

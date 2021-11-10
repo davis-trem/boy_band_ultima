@@ -1,4 +1,5 @@
 import { Scene, GameObjects, Events } from 'phaser';
+import { TickPlayedData } from './midiPlayer';
 
 class CharacterBuilder {
   private scene: Scene;
@@ -110,28 +111,26 @@ class CharacterBuilder {
       this.chargingAttack = !this.chargingAttack;
     });
 
-    this.emitter.on(
-      'TICK_PLAYED',
-      ({ tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat }) => {
-        console.log(tick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat, 'tttttt');
-      },
-    );
-
-    this.emitter.on('BEAT_PLAYED', ({ beat }) => {
-      if (this.chargingAttack && this.beatsSinceCharging !== null) {
-        this.beatsSinceCharging++;
-        console.log(this.beatsSinceCharging, beat);
+    this.emitter.on('TICK_PLAYED', ({ tickHasReachBeat, closestBeat }: TickPlayedData) => {
+      if (!this.chargingAttack) {
+        return;
       }
-      if (this.chargingAttack && this.beatsSinceCharging === null) {
+
+      if (this.beatsSinceCharging !== null && tickHasReachBeat) {
+        this.beatsSinceCharging++;
+        console.log('beat played', this.beatsSinceCharging, closestBeat);
+      }
+      if (this.beatsSinceCharging === null) {
         this.beatsSinceCharging = 1;
-        console.log(this.beatsSinceCharging, beat);
+        console.log(this.beatsSinceCharging, closestBeat);
       }
 
       if (this.beatsSinceCharging > this.CHARGING_BEAT_COUNT) {
+        this.chargingAttack = false;
+        console.log('diiiiiie');
         char.play('character_die');
         char.once('animationcomplete', () => {
           char.anims.reverse();
-          this.chargingAttack = false;
           this.attacking = false;
           this.beatsSinceCharging = null;
           char.play('character_idle');

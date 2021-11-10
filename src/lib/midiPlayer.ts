@@ -32,26 +32,25 @@ const INSTRUMENT_TYPES = [
   'Sound Effects',
 ];
 
-type BeatPlayedCallBackType = (beatsPlayedInCurrentMeasure: number) => void;
-type TicksPlayedCallBackType = (
-  currentTick: number,
-  closestBeat: number,
-  ticksFromPreviousBeat: number,
-  ticksToNextBeat: number,
-) => void;
+export type TickPlayedData = {
+  tick: number;
+  tickHasReachBeat: boolean;
+  closestBeat: number;
+  ticksFromPreviousBeat: number;
+  ticksToNextBeat: number;
+};
+type TickPlayedCallBackType = (data: TickPlayedData) => void;
 
 class MidiPlayer {
   private audioContext: AudioContext;
-  private beatPerSec: number;
-  private beatPlayedCallBack: BeatPlayedCallBackType;
-  private bpsIntervalId: NodeJS.Timeout;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private instrumentFiles: { regular: { [key: number]: any }; percussion: { [key: number]: any } };
   private isLoading: boolean;
   private player: MidiPlayerJS.Player;
   private readyPromise: Promise<void>;
   private readyResolver: (value: void | PromiseLike<void>) => void;
-  private tickPlayedCallBack: TicksPlayedCallBackType;
+  private tickPreSecIntervalId: NodeJS.Timeout;
+  private tickPlayedCallBack: TickPlayedCallBackType;
   private ticksPerQuarterNote: number;
   private tracks: TrackType[];
   private webAudioFontPlayer: WebAudioFontPlayer;
@@ -71,7 +70,6 @@ class MidiPlayer {
     this.tracks = [];
 
     // Set callbacks incase it doesn't get set
-    this.beatPlayedCallBack = () => null;
     this.tickPlayedCallBack = () => null;
 
     this.player = new MidiPlayerJS.Player();
@@ -85,12 +83,13 @@ class MidiPlayer {
   }
 
   togglePlay(): void {
-    const beatDurationInSec = 1 / this.beatPerSec;
     if (!this.isLoading) {
       if (this.player.isPlaying()) {
+        // Pause song and set start time to begining of current measure
         this.player.pause();
         this.webAudioFontPlayer.cancelQueue(this.audioContext);
-        clearInterval(this.bpsIntervalId);
+        // clearInterval(this.bpsIntervalId);
+        clearInterval(this.tickPreSecIntervalId);
 
         const beatsPlayedInCurrentMeasure = this.getBeatsPlayedInCurrentMeasure();
         const ticksPerBeatsInCurrentMeasure =
@@ -99,31 +98,44 @@ class MidiPlayer {
         this.player.skipToTick(measureStartTick);
       } else {
         this.player.play();
-        this.beatPlayedCallBack(this.getUserFacingBeatsPlayedInCurrentMeasure());
-        this.bpsIntervalId = setInterval(() => {
-          this.beatPlayedCallBack(this.getUserFacingBeatsPlayedInCurrentMeasure());
-        }, beatDurationInSec * 1000);
+
+        const tickDuration = 60000 / (this.player.tempo * this.player.division); // in millisec
+        // TODO: calulate better way for tick separator, instead of "5"
+        const tickSect = this.player.division / 5;
+        let tick = 0;
+        this.tickPlayedCallBack(this.calculateTickPlayedData(tick));
+        this.tickPreSecIntervalId = setInterval(() => {
+          tick += tickSect;
+          this.tickPlayedCallBack(this.calculateTickPlayedData(tick));
+        }, tickDuration * tickSect);
       }
     }
   }
 
-  onBeatPlayed(callback: BeatPlayedCallBackType): void {
-    this.beatPlayedCallBack = callback;
-  }
-
-  onTickPlayed(callback: TicksPlayedCallBackType): void {
+  onTickPlayed(callback: TickPlayedCallBackType): void {
     this.tickPlayedCallBack = callback;
   }
 
-  getBeatsPlayedInCurrentMeasure(): number {
+  private getBeatsPlayedInCurrentMeasure(): number {
     // start at begining of current measure
     const amountOfBeatsPlayed = this.player.getCurrentTick() / this.ticksPerQuarterNote;
     return amountOfBeatsPlayed % 4;
   }
 
-  getUserFacingBeatsPlayedInCurrentMeasure(): number {
-    const beatsPlayedInCurrentMeasure = Math.round(this.getBeatsPlayedInCurrentMeasure() + 1);
-    return beatsPlayedInCurrentMeasure === 5 ? 1 : beatsPlayedInCurrentMeasure;
+  private calculateTickPlayedData(tick: number): TickPlayedData {
+    const beat = Math.round(tick / this.ticksPerQuarterNote) + 1;
+    const beatInMeasure = beat % 4 || 4;
+    const ticksFromPreviousBeat =
+      tick - Math.floor(tick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote;
+    const ticksToNextBeat =
+      Math.ceil(tick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote - tick;
+    return {
+      tick,
+      tickHasReachBeat: tick % this.ticksPerQuarterNote === 0,
+      closestBeat: beatInMeasure,
+      ticksFromPreviousBeat,
+      ticksToNextBeat,
+    };
   }
 
   private handleFileLoaded() {
@@ -133,7 +145,6 @@ class MidiPlayer {
 
       let percussionInstruments = [];
 
-      this.beatPerSec = tempo / 60;
       const ticksPerSecond = (tempo * ticksPerQuarterNote) / 60;
       this.tracks = Array(tracks.length)
         .fill('')
@@ -207,16 +218,6 @@ class MidiPlayer {
   }
 
   private handleMidiEvent() {
-    this.player.on('playing', ({ tick: currentTick }) => {
-      const beat = Math.round(currentTick / this.ticksPerQuarterNote) + 1;
-      const beatInMeasure = beat % 4 || 4;
-      const ticksFromPreviousBeat =
-        currentTick - Math.floor(currentTick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote;
-      const ticksToNextBeat =
-        Math.ceil(currentTick / this.ticksPerQuarterNote) * this.ticksPerQuarterNote - currentTick;
-      this.tickPlayedCallBack(currentTick, beatInMeasure, ticksFromPreviousBeat, ticksToNextBeat);
-    });
-
     this.player.on('midiEvent', (ev: Event) => {
       const isPercussion = ev.track === 11;
       switch (ev.name) {

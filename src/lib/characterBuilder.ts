@@ -1,21 +1,18 @@
 import { Scene, GameObjects, Events } from 'phaser';
 import { TickPlayedData } from './midiPlayer';
+import BattleBar from '../components/battleBar';
 
 class CharacterBuilder {
   private scene: Scene;
-  // private chargingAttack: boolean;
-  // private attacking: boolean;
-  // private beatsSinceCharging: number;
   private emitter: Events.EventEmitter;
+  private battleBar: BattleBar;
   private CHARGING_BEAT_COUNT = 2;
   private MAX_CHARGING_BEAT_COUNT = 4;
 
-  constructor(scene: Scene, emitter: Events.EventEmitter) {
+  constructor(scene: Scene, emitter: Events.EventEmitter, battleBar: BattleBar) {
     this.scene = scene;
     this.emitter = emitter;
-    // this.chargingAttack = false;
-    // this.attacking = false;
-    // this.beatsSinceCharging = null;
+    this.battleBar = battleBar;
   }
 
   loadSprite(): void {
@@ -90,8 +87,11 @@ class CharacterBuilder {
     });
   }
 
-  createSprite(x: number, y: number): GameObjects.Sprite {
-    const char = this.scene.add.sprite(x, y, 'character').setInteractive().setDataEnabled();
+  createSprite(x: number, y: number, isPlayable: boolean): GameObjects.Sprite {
+    const char = this.scene.add.sprite(x, y, 'character').setDataEnabled();
+    if (isPlayable) {
+      char.setInteractive();
+    }
     char.setData({
       chargingAttack: false,
       attacking: false,
@@ -100,16 +100,17 @@ class CharacterBuilder {
     char.play('character_idle');
 
     char.on('pointerdown', () => {
-      console.log(char.getData('poo'));
-      const [chargingAttack, attacking] = char.getData([
+      const [chargingAttack, attacking, beatsSinceCharging, percentageToBeat] = char.getData([
         'chargingAttack',
         'attacking',
         'beatsSinceCharging',
+        'percentageToBeat',
       ]);
       if (attacking) return;
 
       if (chargingAttack) {
-        char.setData({ attacking: true });
+        console.log({ percentageToBeat, beatsSinceCharging, targetBeat: this.CHARGING_BEAT_COUNT });
+        char.setData({ attacking: true, percentageToBeat: null });
         char.play('character_kick');
         char.once('animationcomplete', () => {
           char.setData({ attacking: false, beatsSinceCharging: null });
@@ -121,36 +122,40 @@ class CharacterBuilder {
       char.setData({ chargingAttack: !chargingAttack });
     });
 
-    this.emitter.on('TICK_PLAYED', ({ tickHasReachBeat, closestBeat }: TickPlayedData) => {
-      const [chargingAttack, beatsSinceCharging] = char.getData([
-        'chargingAttack',
-        'attacking',
-        'beatsSinceCharging',
-      ]);
-      if (!chargingAttack) {
-        return;
-      }
+    this.emitter.on(
+      'TICK_PLAYED',
+      ({ tickHasReachBeat, closestBeat, percentageToBeat }: TickPlayedData) => {
+        char.setData({ percentageToBeat });
+        const [chargingAttack, beatsSinceCharging] = char.getData([
+          'chargingAttack',
+          'beatsSinceCharging',
+        ]);
+        if (!chargingAttack) {
+          return;
+        }
 
-      if (beatsSinceCharging !== null && tickHasReachBeat) {
-        char.setData({ beatsSinceCharging: beatsSinceCharging + 1 });
-        console.log('beat played', beatsSinceCharging, closestBeat);
-      }
-      if (beatsSinceCharging === null) {
-        char.setData({ beatsSinceCharging: 1 });
-        console.log(beatsSinceCharging, closestBeat);
-      }
+        if (beatsSinceCharging !== null && tickHasReachBeat) {
+          char.setData({ beatsSinceCharging: beatsSinceCharging + 1 });
+          console.log('beat played', beatsSinceCharging, closestBeat);
+        }
+        if (beatsSinceCharging === null) {
+          char.setData({ beatsSinceCharging: 1 });
+          console.log(beatsSinceCharging, closestBeat);
+        }
 
-      if (beatsSinceCharging > this.CHARGING_BEAT_COUNT) {
-        char.setData({ chargingAttack: false });
-        console.log('diiiiiie');
-        char.play('character_die');
-        char.once('animationcomplete', () => {
-          char.anims.reverse();
-          char.setData({ attacking: false, beatsSinceCharging: null });
-          char.play('character_idle');
-        });
-      }
-    });
+        if (beatsSinceCharging > this.CHARGING_BEAT_COUNT && percentageToBeat > 0.5) {
+          char.setData({ chargingAttack: false });
+          console.log('diiiiiie');
+          char.play('character_die');
+          this.battleBar.offsetPlayerValueBy(-0.15);
+          char.once('animationcomplete', () => {
+            char.anims.reverse();
+            char.setData({ attacking: false, beatsSinceCharging: null });
+            char.play('character_idle');
+          });
+        }
+      },
+    );
 
     return char;
   }

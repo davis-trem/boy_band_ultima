@@ -1,8 +1,10 @@
 import { Scene, Events } from 'phaser';
 import MidiPlayer from '../lib/midiPlayer';
 import CharacterBuilder from '../lib/characterBuilder';
+import BattleBar from '../components/battleBar';
 
 export class Game extends Scene {
+  private battleBar: BattleBar;
   private characterBuilder: CharacterBuilder;
   private emitter: Events.EventEmitter;
 
@@ -10,11 +12,13 @@ export class Game extends Scene {
     super({
       key: 'GameScene',
     });
-    this.emitter = new Events.EventEmitter();
-    this.characterBuilder = new CharacterBuilder(this, this.emitter);
   }
 
   preload(): void {
+    this.emitter = new Events.EventEmitter();
+    this.battleBar = new BattleBar(this);
+    this.characterBuilder = new CharacterBuilder(this, this.emitter, this.battleBar);
+
     this.load.binary('mymidi', '../../assets/midi/stickerbush_symphony.mid');
     // this.load.binary('mymidi', '../../assets/midi/fz_mute_city.mid');
     this.load.image('bg', '../../assets/image/test_bg.png');
@@ -35,22 +39,34 @@ export class Game extends Scene {
       .setScale(2);
 
     const char = this.characterBuilder
-      .createSprite(this.cameras.main.width - 46 * 3, this.cameras.main.centerY + 46)
+      .createSprite(this.cameras.main.width - 46 * 3, this.cameras.main.centerY + 46, true)
       .setScale(4);
 
     char.setData({ poo: 23 });
 
-    const char2 = this.characterBuilder
-      .createSprite(this.cameras.main.width / 2, this.cameras.main.centerY + 46)
-      .setScale(4);
+    const enemy = this.characterBuilder
+      .createSprite(46 * 3, this.cameras.main.centerY + 46, false)
+      .setScale(4)
+      .setFlipX(true);
 
-    char2.setData({ poo: 56 });
+    enemy.setData({ poo: 56 });
+
+    const beatText = this.add
+      .text(this.cameras.main.centerX, this.cameras.main.centerY, 'GO', {
+        fontSize: '8rem',
+        strokeThickness: 8,
+      })
+      .setOrigin(0.5);
 
     const midiPlayer = new MidiPlayer(this.cache.binary.get('mymidi'));
     await midiPlayer.waitUntillReady();
 
     midiPlayer.onTickPlayed((data) => {
       this.emitter.emit('TICK_PLAYED', data);
+      beatText.setText(`${data.closestBeat + data.percentageToBeat}`);
+      beatText.setScale(data.tickHasReachBeat ? 1 : data.percentageToBeat / 2);
+      const color = data.tickHasReachBeat ? '#00FF00' : '#FFFFFF';
+      beatText.setStyle({ color, stroke: color });
     });
 
     image.on('pointerdown', () => {

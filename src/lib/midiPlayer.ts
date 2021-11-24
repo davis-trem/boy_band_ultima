@@ -36,6 +36,7 @@ export type TickPlayedData = {
   tick: number;
   tickHasReachBeat: boolean;
   closestBeat: number;
+  percentageToBeat: number;
   ticksFromPreviousBeat: number;
   ticksToNextBeat: number;
 };
@@ -133,6 +134,7 @@ class MidiPlayer {
       tick,
       tickHasReachBeat: tick % this.ticksPerQuarterNote === 0,
       closestBeat: beatInMeasure,
+      percentageToBeat: (tick % this.ticksPerQuarterNote) / this.ticksPerQuarterNote,
       ticksFromPreviousBeat,
       ticksToNextBeat,
     };

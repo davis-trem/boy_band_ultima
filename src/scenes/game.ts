@@ -46,8 +46,7 @@ export class Game extends Scene {
 
     const enemy = this.characterBuilder
       .createSprite(46 * 3, this.cameras.main.centerY + 46, false)
-      .setScale(4)
-      .setFlipX(true);
+      .setScale(-4, 4);
 
     enemy.setData({ poo: 56 });
 

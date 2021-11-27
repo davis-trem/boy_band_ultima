@@ -1,4 +1,4 @@
-import { Scene, GameObjects, Events } from 'phaser';
+import { Scene, GameObjects, Events, Tweens } from 'phaser';
 import { TickPlayedData } from './midiPlayer';
 import BattleBar from '../components/battleBar';
 
@@ -83,15 +83,35 @@ class CharacterBuilder {
       frames: this.scene.anims.generateFrameNumbers('character', { frames: [35, 36, 37] }),
       frameRate: 8,
       repeat: 0,
+      yoyo: true,
       // repeatDelay: 2000,
     });
   }
 
-  createSprite(x: number, y: number, isPlayable: boolean): GameObjects.Sprite {
-    const char = this.scene.add.sprite(x, y, 'character').setDataEnabled();
+  createSprite(x: number, y: number, isPlayable: boolean): GameObjects.Container {
+    const container = this.scene.add.container(x, y);
+    const char = this.scene.add.sprite(0, 0, 'character').setDataEnabled();
+    let damageStatus: GameObjects.Text = null;
+    let damageStatusTween: Tweens.Tween = null;
+
     if (isPlayable) {
       char.setInteractive();
+
+      damageStatus = this.scene.add.text(0, 0, 'POO').setOrigin(0.5).setAlpha(0);
+      damageStatusTween = this.scene.add.tween({
+        targets: damageStatus,
+        duration: 300,
+        paused: true,
+        ease: 'Circ.easeOut',
+        alpha: 1,
+        scale: 2,
+        y: -10,
+        yoyo: true,
+        repeat: 0,
+      });
+      container.add(damageStatus);
     }
+
     char.setData({
       chargingAttack: false,
       attacking: false,
@@ -110,13 +130,13 @@ class CharacterBuilder {
 
       if (chargingAttack) {
         // Stop charging animation and do attack
-        console.log({ percentageToBeat, beatsSinceCharging, targetBeat: this.CHARGING_BEAT_COUNT });
         char.setData({ attacking: true, percentageToBeat: null });
         char.play('character_kick');
-        this.battleBar.offsetPlayerValueBy(
-          this.calulateDamage(beatsSinceCharging.track, percentageToBeat),
-        );
-        console.log(this.calulateDamage(beatsSinceCharging.track, percentageToBeat));
+
+        const damage = this.calulateDamage(beatsSinceCharging.track, percentageToBeat);
+        this.battleBar.offsetPlayerValueBy(damage);
+        this.showDamageStatus(damageStatus, damageStatusTween, damage);
+
         char.once('animationcomplete', () => {
           char.setData({ attacking: false, beatsSinceCharging: null });
           char.playAfterRepeat('character_idle');
@@ -158,12 +178,10 @@ class CharacterBuilder {
         // Get updated beatsSinceCharging since it changed in previous if
         beatsSinceCharging = char.getData('beatsSinceCharging');
         if (beatsSinceCharging.track >= this.CHARGING_BEAT_COUNT && percentageToBeat > 0.5) {
-          char.setData({ chargingAttack: false });
-          console.log('diiiiiie');
+          char.setData({ attacking: true, chargingAttack: false });
           char.play('character_die');
           this.battleBar.offsetPlayerValueBy(-this.MAX_DAMAGE_GIVEN);
           char.once('animationcomplete', () => {
-            char.anims.reverse();
             char.setData({ attacking: false, beatsSinceCharging: null });
             char.play('character_idle');
           });
@@ -171,19 +189,46 @@ class CharacterBuilder {
       },
     );
 
-    return char;
+    container.add(char);
+    return container;
   }
 
   private calulateDamage(beatsSinceChargingTrack: number, percentageToBeat: number): number {
-    // If over a beat away from target, take points away
-    if (Math.abs(this.CHARGING_BEAT_COUNT - beatsSinceChargingTrack) > 1) {
+    const damagePercentage =
+      1 - Math.abs(this.CHARGING_BEAT_COUNT - (beatsSinceChargingTrack + percentageToBeat));
+    // If over a beat AND/OR 20% away from target, take points away
+    if (
+      Math.abs(this.CHARGING_BEAT_COUNT - beatsSinceChargingTrack) > 1 ||
+      damagePercentage <= 0.2
+    ) {
       return -this.MAX_DAMAGE_GIVEN;
     }
 
-    return (
-      (1 - Math.abs(this.CHARGING_BEAT_COUNT - (beatsSinceChargingTrack + percentageToBeat))) *
-      this.MAX_DAMAGE_GIVEN
-    );
+    return damagePercentage * this.MAX_DAMAGE_GIVEN;
+  }
+
+  private showDamageStatus(
+    damageStatus: GameObjects.Text | null,
+    damageStatusTween: Tweens.Tween,
+    damage: number,
+  ): void {
+    if (!damageStatus) {
+      return;
+    }
+
+    const damagePercentage = damage / this.MAX_DAMAGE_GIVEN;
+    if (damagePercentage <= 0.2) {
+      damageStatus.setText('FUCKING\nTRASH');
+    } else if (0.2 < damagePercentage && damagePercentage <= 0.4) {
+      damageStatus.setText('POOR');
+    } else if (0.4 < damagePercentage && damagePercentage <= 0.6) {
+      damageStatus.setText('GOOD');
+    } else if (0.6 < damagePercentage && damagePercentage <= 0.8) {
+      damageStatus.setText('GREAT');
+    } else {
+      damageStatus.setText('PERFECT');
+    }
+    damageStatusTween.play();
   }
 }
 

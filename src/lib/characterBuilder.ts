@@ -83,8 +83,6 @@ class CharacterBuilder {
       frames: this.scene.anims.generateFrameNumbers('character', { frames: [35, 36, 37] }),
       frameRate: 8,
       repeat: 0,
-      yoyo: true,
-      // repeatDelay: 2000,
     });
   }
 
@@ -116,6 +114,7 @@ class CharacterBuilder {
       chargingAttack: false,
       attacking: false,
       beatsSinceCharging: null,
+      deadBeats: null,
     });
     char.play('character_idle');
 
@@ -152,8 +151,25 @@ class CharacterBuilder {
       'TICK_PLAYED',
       ({ tickHasReachBeat, closestBeat, percentageToBeat }: TickPlayedData) => {
         char.setData({ percentageToBeat });
-        let beatsSinceCharging = char.getData('beatsSinceCharging');
-        const chargingAttack = char.getData('chargingAttack');
+        let [beatsSinceCharging, deadBeats] = char.getData(['beatsSinceCharging', 'deadBeats']);
+        const [chargingAttack] = char.getData(['chargingAttack']);
+
+        // Tracks how long to stay on ground after attacked
+        if (tickHasReachBeat && deadBeats !== null && deadBeats.beatOnDead !== closestBeat) {
+          char.setData({
+            deadBeats: { track: deadBeats.track + 1, beatOnDead: deadBeats.beatOnDead },
+          });
+          deadBeats = char.getData('deadBeats');
+          if (deadBeats.track === this.CHARGING_BEAT_COUNT) {
+            char.playReverse('character_die');
+            char.once('animationcomplete', () => {
+              char.setData({ attacking: false, beatsSinceCharging: null, deadBeats: null });
+              char.play('character_idle');
+            });
+          }
+          return;
+        }
+
         if (!chargingAttack) {
           return;
         }
@@ -178,13 +194,13 @@ class CharacterBuilder {
         // Get updated beatsSinceCharging since it changed in previous if
         beatsSinceCharging = char.getData('beatsSinceCharging');
         if (beatsSinceCharging.track >= this.CHARGING_BEAT_COUNT && percentageToBeat > 0.5) {
-          char.setData({ attacking: true, chargingAttack: false });
+          char.setData({
+            attacking: true,
+            chargingAttack: false,
+            deadBeats: { track: 0, beatOnDead: closestBeat },
+          });
           char.play('character_die');
           this.battleBar.offsetPlayerValueBy(-this.MAX_DAMAGE_GIVEN);
-          char.once('animationcomplete', () => {
-            char.setData({ attacking: false, beatsSinceCharging: null });
-            char.play('character_idle');
-          });
         }
       },
     );
